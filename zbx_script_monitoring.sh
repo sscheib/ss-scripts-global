@@ -6,23 +6,23 @@
 # binaries, which are required by this script
 declare -ar __REQUIRED_BINARIES=(
   "zabbix_get"
-  "logger"
+  "jq"
 )
 
 # directories, which contain scripts, which low level discovery from zabbix should create items from
 declare -r __SCRIPTS_DIRECTORIES=(
   "/root/sources/ss-scripts-"$(hostname -f)""
+  "/root/sources/ss-scripts-global"
 )
 
 # additional scripts (in other folders) to "discover" for LLD
 declare -ar __ADDITIONAL_SCRIPTS=(
-  "/tmp/zabbix_test/test.sh"
 )
 
 # scripts to exclude from LLD (if they are in the defined directories)
 # this script needs to be sourced (via 'source scriptname.sh') as FIRST script in the script sourcing this script
 declare -ar __EXCLUDED_SCRIPTS=(
-  "/root/sources/ss-scripts-"$(hostname -f)"/zbx_script_monitoring_setup.sh"
+  ".*_setup.sh$"
 )
 
 ##
@@ -51,7 +51,7 @@ function zbx::scriptMonitoring::print () {
     level="${2}"
   };
 
-  declare formattedMsg="$(printf "[%s] %s: %-25s: %-7s> %s\n" "$(date +'%d.%m.%y - %H:%M:%S')" "$(basename "${0}")" "${FUNCNAME[1]}" "${level}" "${message}")"
+  declare formattedMsg="$(printf "[%s] %s: %-36s: %-7s> %s\n" "$(date +'%d.%m.%y - %H:%M:%S')" "$(basename "${0}")" "${FUNCNAME[1]}" "${level}" "${message}")"
   # looks like: [02.01.20 - 17:52:51] upload_logs_gdrive.sh: main                     : INFO   > my message here
 
   # if we are in an interactive session, or if we have no access 
@@ -65,12 +65,12 @@ function zbx::scriptMonitoring::print () {
 }; # function zbx::scriptMonitoring::print ( <message> [level] )
 
 function zbx::scriptMonitoring::init::default () {
-  zbx::scriptMonitoring::print "${FUNCNAME}: Values: ${@}" "DEBUG"
+  zbx::scriptMonitoring::print "Values: '${*}'" "DEBUG"
   zbx::scriptMonitoring::init "${__DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE}" "${__DEFAULT_EXIT_ON_ERROR}" "${__DEFAULT_NOTIFICATION_LOG}"
 }; # function zbx::scriptMonitoring::init::default
 
 function zbx::scriptMonitoring::init () {
-  zbx::scriptMonitoring::print "${FUNCNAME}: Values: ${@}" "DEBUG"
+  zbx::scriptMonitoring::print "Values: '${*}'" "DEBUG"
   declare zabbixAgentConfigurationFile="${1}"
   [[ -e "${zabbixAgentConfigurationFile}" ]] || {
     zbx::scriptMonitoring::print "zabbixAgentConfigurationFile '${zabbixAgentConfigurationFile}' does not exist!" "ERROR";
@@ -108,7 +108,9 @@ function zbx::scriptMonitoring::init () {
     };
 
     # file exists, lets check if we can write to it
-    [[ -w "${2}" ]] || {
+    ( [[ -w "${2}" ]] || 
+      [[ "$(id)" =~ ^uid=0 ]]
+    ) || {
       zbx::scriptMonitoring::print "notificationLog was specified (value: '${3}') and exists, but it is not writeable for the current user ('${USER}')!" "ERROR";
       return 6;
     };
@@ -146,19 +148,26 @@ function zbx::scriptMonitoring::send () {
   echo "- script_execution["${scriptName}","${valueType}"] ${value}" | zabbix_sender -vv -i - -c "${__ZABBIX_AGENT_CONFIGURATION_FILE}" &>> "${__NOTIFICATION_LOG}" || {
     zbx::scriptMonitoring::print "Failed sending data!" "ERROR";
   };
-}; # function zbx::scriptMonitoring::send ( <scriptName> <value> [valueType, default: runtime_return_value] )
+}; # function zbx::scriptMonitoring::send ( <scriptName> <value> [valueType, default: exitCode] )
 
 function zbx::scriptMonitoring::lowLevelDiscovery () {
-  zbx::scriptMonitoring::print "${FUNCNAME}: Values: ${@}" "DEBUG"
+  zbx::scriptMonitoring::print "Values: '${@}'" "DEBUG"
   declare -a scripts=()
+  declare -i isExcluded=1
   for directory in "${__SCRIPTS_DIRECTORIES[@]}"; do
     for file in "${directory}/"*; do
+      isExcluded=1
       for excludedFile in "${__EXCLUDED_SCRIPTS[@]}"; do
         [[ ! "${file}" =~ ${excludedFile} ]] || {
-          zbx::scriptMonitoring::print "'${file}' from directory is set to be excluded in '__EXCLUDED_SCRIPTS', skipping it." "INFO";
-          continue;
+          isExcluded=0;
+          break;
         };
       done
+
+      [[ "${isExcluded}" -ne 0 ]] || {
+        zbx::scriptMonitoring::print "'${file}' from directory is set to be excluded in '__EXCLUDED_SCRIPTS', skipping it." "INFO";
+        continue;
+      };
 
       [[ -f "${file}" ]] || {
         zbx::scriptMonitoring::print "'${file}' from directory is not a file, skipping it." "WARNING";
@@ -185,7 +194,7 @@ function zbx::scriptMonitoring::lowLevelDiscovery () {
   output='{ "data": ['
   for file in "${scripts[@]}"; do
     # for every script we have we add this to our output
-    output+=" { \"{#SCRIPTNAME}\": \""$(basename "${file}")"\",\"{#EXITCODE}\": \"-1\",\"{#EXITLINE}\": \"-1\",\"{#EXITERROR}\": \"-1\",\"{#ERRORLINE}\": \"-1\",\"{#RUNTIMEMESSAGES}\": \"UNDEF\" },"
+    output+=" { \"{#SCRIPTNAME}\": \""$(basename "${file}")"\",\"{#EXITCODE}\": \"-1\",\"{#EXITLINE}\": \"-1\",\"{#ERRORCODE}\": \"-1\",\"{#ERRORLINE}\": \"-1\",\"{#RUNTIMEMESSAGE}\": \"UNDEF\" },"
     # looks like: 
   done
   # we need to remove the trailing , and the prefixed spaces
@@ -193,8 +202,8 @@ function zbx::scriptMonitoring::lowLevelDiscovery () {
 
   # finally we need to suffix this
   output+="]}"
-  printf "${output}\n" | jq || {
-    zbx::scriptMonitoring::send "lowLevelDiscovery failed - invalid JSON!" "RUNTIMEMESSAGE";
+  printf "${output}\n" | jq . || {
+    zbx::scriptMonitoring::send "lowLevelDiscovery failed - invalid JSON!" "runtimeMessage";
     exit 1;
   };
 
