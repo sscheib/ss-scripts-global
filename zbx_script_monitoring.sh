@@ -19,13 +19,12 @@
 #     - b: call zbx::scriptMonitoring:init <zabbixAgentConfigurationFile> <exitOnError> [notificationLog] 
 # Exit codes:
 #   0: If called via command line argument "LowLevelDiscovery", LLD was successful
-#   0: If sourced, sourcing was successful
 #   1: LowLevelDiscovery generated an invalid JSON
 #   2: LowLevelDiscovery failed
 #   NOTE: exit 2 should in usual circumstances never happen, as exit 1 should trigger before, but for the sake
 #         of completeness it is mentioned here.
 #
-# log file                                      : yes, /var/log/zabbix_notification.log
+# log file                                      : yes, by default /var/log/zabbix_notification.log
 # logrotate                                     : yes, provided with the _setup script
 # zabbix script monitoring integration
 #  - exit and error codes                       : yes, traps in zbx_script_monitoring.sh
@@ -35,14 +34,32 @@
 # Author:
 # Steffen Scheib (steffen@scheib.me)
 #
+# Legend:
+# + New
+# - Bugfix
+# ~ Change
+# . Various
+#
 # Changelog:
-# 05.01.2020: - Proper commenting
-#             - Refactored a few things
-# 04.01.2020: - Initial script
+# 06.01.2020: + Introduced zbx::scriptMonitoring::clear to "reset" the last values of the sourcing script
+#             -> This resulted in following changes:
+#                ~ zbx::scriptMonitoring::init now requires four instead of three arguments (added clearZabbixOnInit)
+#                + Added __DEFAULT_CLEAR_ZABBIX_ON_INIT with the value 0 (=true)
+#                + Added __CLEAR_ZABBIX_ON_INIT
+#             + Added the Legend
+#             ~ Incremented VERSION to 1.2
+#             - Fixed call to the errorTrap
+#             - Removed exit 0 if sourced - as it will (naturally) exit the script .. big mistake :O
+#             - Fixed check whether to call zbx::scriptMonitoring::clear in zbx::scriptMonitoring::init
+#             - Fixed assignment of $3 (clearZabbixOnInit) in zbx::scriptMonitoring::init
+#             . Some small improvements
+# 05.01.2020: + Proper commenting
+#             ~ Refactored a few things
+# 04.01.2020: . Initial script
 
 #
-# version: 1.1
-declare VERSION="1.1"
+# version: 1.2
+declare VERSION="1.2"
 
 ##
 # general global variables
@@ -78,6 +95,8 @@ declare -r __DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE="/etc/zabbix/zabbix_agentd.
 declare -r __DEFAULT_NOTIFICATION_LOG="/var/log/zabbix_notification.log"
 # determines, whether to exit on error (with the original return code)
 declare -ir __DEFAULT_EXIT_ON_ERROR=1
+# determines, whether on init with default values the last values of the script in Zabbix should be "reset" (set to -1)
+declare -ir __DEFAULT_CLEAR_ZABBIX_ON_INIT=0
 
 ##
 # runtime global variables - initially set to the default values
@@ -85,6 +104,7 @@ declare -ir __DEFAULT_EXIT_ON_ERROR=1
 declare __ZABBIX_AGENT_CONFIGURATION_FILE="${__DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE}"
 declare __NOTIFICATION_LOG="${__DEFAULT_NOTIFICATION_LOG}"
 declare __EXIT_ON_ERROR="${__DEFAULT_EXIT_ON_ERROR}"
+declare -i __CLEAR_ZABBIX_ON_INIT="${__DEFAULT_CLEAR_ZABBIX_ON_INIT}"
 
 ###
 # function zbx::scriptMonitoring::print
@@ -157,7 +177,8 @@ function zbx::scriptMonitoring::print () {
 #------+-----------------------------------------------+-------------+-------------------------------------------------< 
 #   01 | __DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE     | read        | --
 #   02 | __DEFAULT_EXIT_ON_ERROR                       | read        | --
-#   03 | __DEFAULT_NOTIFICATION_LOG                    | read        | --
+#   03 | __DEFAULT_CLEAR_ZABBIX_ON_INIT                | read        | --
+#   04 | __DEFAULT_NOTIFICATION_LOG                    | read        | --
 #---
 # Return values:
 #---
@@ -168,7 +189,7 @@ function zbx::scriptMonitoring::print () {
 #####
 function zbx::scriptMonitoring::init::default () {
   zbx::scriptMonitoring::print "Values: '${*}'" "DEBUG"
-  zbx::scriptMonitoring::init "${__DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE}" "${__DEFAULT_EXIT_ON_ERROR}" "${__DEFAULT_NOTIFICATION_LOG}"
+  zbx::scriptMonitoring::init "${__DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE}" "${__DEFAULT_EXIT_ON_ERROR}" "${__DEFAULT_CLEAR_ZABBIX_ON_INIT}" "${__DEFAULT_NOTIFICATION_LOG}"
   returnCode="${?}"
   [[ "${returnCode}" -eq 0 ]] || {
     zbx::scriptMonitoring::print "Initialization of this script with default values failed! Function returned with '${returnCode}'" "ERROR";
@@ -196,8 +217,10 @@ function zbx::scriptMonitoring::init::default () {
 #------+----------------------------------------+-------------+--------------------------------------------------------< 
 #<  $1> | zabbixAgentConfigurationFile          | string      | Configuration file of the Zabbix agent
 #<  $2> | exitOnError                           | boolean     | Determines whether the script exits if an error from
-#                                               |             | the sourcing script is received via the error trap
-#[  $3] | notificationLog                       | string      | File which is used as log file from this script. If not
+#       |                                       |             | the sourcing script is received via the error trap
+#<  $3> | clearZabbixOnInit                     | boolean     | Determines whether the stored values of the sourcing
+#       |                                       |             | script within Zabbix should be reset (set to -1)
+#[  $4] | notificationLog                       | string      | File which is used as log file from this script. If not
 #       |                                       |             | given __DEFAULT_NOTIFICATION_LOG is used as log file 
 #---
 # Global variables:
@@ -207,7 +230,8 @@ function zbx::scriptMonitoring::init::default () {
 #   01 | __DEFAULT_NOTIFICATION_LOG                    | read        | --
 #   02 | __ZABBIX_AGENT_CONFIGURATION_FILE             | write       | --
 #   03 | __EXIT_ON_ERROR                               | write       | --
-#   04 | __NOTIFICATION_LOG                            | write       | --
+#   04 | __CLEAR_ZABBIX_ON_INIT                        | write       | --
+#   05 | __NOTIFICATION_LOG                            | write       | --
 #---
 # Return values:
 #---
@@ -218,8 +242,9 @@ function zbx::scriptMonitoring::init::default () {
 # (return)   2 | Given value for zabbixAgentConfigurationFile (first parameter) is not a file
 # (return)   3 | Given value for zabbixAgentConfigurationFile (first parameter) is not readable for the current user
 # (return)   4 | Given value for exitOnError (second parameter) is not a boolean
-# (return)   5 | notificationLog (third parameter) was given, which did not exist and the creation of it failed
-# (return)   6 | notificationLog (third parameter) was given and the file existed, but not readable for the current user
+# (return)   5 | Given value for clearZabbixOnInit (third parameter) is not a boolean
+# (return)   6 | notificationLog (fourth parameter) was given, which did not exist and the creation of it failed
+# (return)   7 | notificationLog (fourth parameter) was given and the file existed, but not readable for the current user
 #####
 function zbx::scriptMonitoring::init () {
   zbx::scriptMonitoring::print "Values: '${*}'" "DEBUG"
@@ -246,29 +271,37 @@ function zbx::scriptMonitoring::init () {
     return 4;
   };
 
+
+  declare clearZabbixOnInit="${3}"
+  [[ "${clearZabbixOnInit}" =~ ^0|1$ ]] || {
+    zbx::scriptMonitoring::print "clearZabbixOnInit has an invalid value: '${clearZabbixOnInit}'. Valid values: 0,1." "ERROR";
+    return 5;
+  };
+
+
   declare notificationLog="${__DEFAULT_NOTIFICATION_LOG}"
-  [[ -z "${3}" ]] || {
+  [[ -z "${4}" ]] || {
     # notificationLog is given, let's see if the file exists
-    ( [[ -e "${3}" ]] &&
-      [[ -f "${3}" ]]
+    ( [[ -e "${4}" ]] &&
+      [[ -f "${4}" ]]
     ) || {
       # file does not exist, let's try to create it
-      touch "${3}" || {
-        zbx::scriptMonitoring::print "notificationLog was specified (value: '${3}'), but it does not exist and trying to create it failed!" "ERROR";
-        return 5;
+      touch "${4}" || {
+        zbx::scriptMonitoring::print "notificationLog was specified (value: '${4}'), but it does not exist and trying to create it failed!" "ERROR";
+        return 6;
       };
     };
 
     # file exists, lets check if we can write to it
-    ( [[ -w "${3}" ]] || 
+    ( [[ -w "${4}" ]] || 
       [[ "$(id)" =~ ^uid=0 ]]
     ) || {
-      zbx::scriptMonitoring::print "notificationLog was specified (value: '${3}') and exists, but it is not writeable for the current user ('${USER}')!" "ERROR";
-      return 6;
+      zbx::scriptMonitoring::print "notificationLog was specified (value: '${4}') and exists, but it is not writeable for the current user ('${USER}')!" "ERROR";
+      return 7;
     };
 
     # all checks passed
-    notificationLog="${3}"
+    notificationLog="${4}"
   };
 
 
@@ -281,11 +314,83 @@ function zbx::scriptMonitoring::init () {
 
   # everything alright, let's assign the given values to the global variables
   __ZABBIX_AGENT_CONFIGURATION_FILE="${zabbixAgentConfigurationFile}"
-  __NOTIFICATION_LOG="${notificationLog}"
   __EXIT_ON_ERROR="${exitOnError}"
+  __CLEAR_ZABBIX_ON_INIT="${clearZabbixOnInit}"
+  __NOTIFICATION_LOG="${notificationLog}"
+
+  [[ "${__CLEAR_ZABBIX_ON_INIT}" -eq 0 ]] || {
+    return 0;
+  };
+
+  # reset flag is set
+  zbx::scriptMonitoring::clear
+
+}; # function zbx::scriptMonitoring::init ( <zabbixAgentConfigurationFile>, <exitOnError>, <clearZabbixOnInit>, [notificationLog, default: __DEFAULT_NOTIFICATION_LOG] )
+
+###
+# function zbx::scriptMonitoring::clear
+#---
+# Description:
+#---
+# Used to "reset" the last values of the sourcing script.
+# By resetting it is meant, that the messageTypes noted below (see NOTE) are set to 0. The runtimeMessage will have
+# the value 'Reset of last values triggered via <nameOfThisScript>' set.
+#
+# NOTE:
+# Currently implemented value types are:
+# - exitCode
+# - exitLine
+# - errorCode
+# - errorLine
+# - runtimeMessage
+#---
+# Arguments:
+#---
+#   #  | name                                   | type        | description
+#------+----------------------------------------+-------------+--------------------------------------------------------< 
+#  none
+#---
+# Global variables:
+#---
+#   #  | name                                          | access-type | notes
+#------+-----------------------------------------------+-------------+-------------------------------------------------< 
+#   01 | BASH_SOURCE                                   | read        | --
+#---
+# Return values:
+#---
+# return code  | description
+#--------------+-------------------------------------------------------------------------------------------------------< 
+# (return)   0 | Value was sent to Zabbix
+# (return)   1 | Unable to send value to Zabbix
+#####
+function zbx::scriptMonitoring::clear () {
+  declare scriptName="${0}"
+  declare -a messageTypes=(
+    "exitCode"
+    "exitLine"
+    "errorCode"
+    "errorLine"
+    "runtimeMessage"
+  )
+
+  failed=1
+  for messageType in "${messageTypes[@]}"; do
+    value="0"
+    [[ ! "${messageType}" =~ ^runtimeMessage$ ]] || {
+      value="Reset of last values triggered via "$(basename ${BASH_SOURCE[0]})"";
+    };
+    zbx::scriptMonitoring::send "${scriptName}" "${value}" "${messageType}" || {
+      zbx::scriptMonitoring::print "Resetting '${messageType}' with '${value}' for script '${scriptName}' failed!";
+      failed=0;
+    };
+  done
+
+  [[ "${failed}" -ne 0 ]] || {
+    return 1;
+  };
 
   return 0;
-}; # function zbx::scriptMonitoring::init ( <zabbixAgentConfigurationFile>, <exitOnError>, [notificationLog, default: __DEFAULT_NOTIFICATION_LOG] ) 
+}; # function zbx::scriptMonitoring::clear ( )
 
 ###
 # function zbx::scriptMonitoring::send
@@ -558,7 +663,7 @@ function zbx::scriptMonitoring::errorTrap () {
 
 # define the traps
 trap 'zbx::scriptMonitoring::exitTrap ${LINENO}' EXIT
-trap 'zbx::scriptMoonitoring::errorTrap ${LINENO}' ERR
+trap 'zbx::scriptMonitoring::errorTrap ${LINENO}' ERR
 
 
 # lowLevelDiscovery is the only accepted command line argument - the script is meant to be source'd
@@ -568,7 +673,9 @@ if [[ "${1}" =~ ^lowLevelDiscovery$ ]]; then
     zbx::scriptMonitoring::send "${0}" "ERROR: lowLevelDiscovery failed!" "RuntimeMessage";
     exit 2;
   };
+
+  # LLD was successful
+  exit 0;
 fi
 
-exit 0;
 #EOF
