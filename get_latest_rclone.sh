@@ -23,18 +23,27 @@
 # Author:
 # Steffen Scheib (steffen@scheib.me)
 #
+# Legend:
+# + New
+# - Bugfix
+# ~ Change
+# . Various
+#
 # Changelog:
-# 05.01.2020: - Added support for multiple architectures (arm and x86_x64)
-#             - Integrated zbx_script_monitoring into the script 
-#             - Changed the output formatting of write_output along with the parameters
-#             - write_output will only print the message if in an interactive session
-#             - Added proper header
-#             - Added log file monitoring within Zabbi for both debug and log files
-#       2019: Initial script
+# 06.01.2010: + Added call to zbx::scriptMonitoring::init::default
+#             + Incremented VERSION to 1.2
+#             + Added Legend and adjusted previous entries of the changelog
+# 05.01.2020: + Added support for multiple architectures (arm and x86_x64)
+#             + Integrated zbx_script_monitoring into the script 
+#             + Added proper header
+#             + Added log file monitoring within Zabbix for both debug and log files
+#             ~ Changed the output formatting of write_output along with the parameters
+#             ~ write_output will only print the message if in an interactive session
+# xx.xx.2019: . Initial script
 
 #
-# version: 1.1
-declare VERSION="1.1"
+# version: 1.2
+declare VERSION="1.2"
 
 
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -46,6 +55,7 @@ declare -r __DEBUG_FILE="/var/log/rclone_download.debug"
 
 
 source "/root/sources/ss-scripts-global/zbx_script_monitoring.sh"
+zbx::scriptMonitoring::init::default
 
 # Writes a message to stdout if we are in an interactive session
 # It also writes to the defined _LOG_FILE as well as notify Zabbix
