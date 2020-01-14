@@ -19,9 +19,12 @@
 #     - b: call zbx::scriptMonitoring:init <zabbixAgentConfigurationFile> <exitOnError> [notificationLog] 
 # Exit codes:
 #   0: If called via command line argument "LowLevelDiscovery", LLD was successful
-#   1: LowLevelDiscovery generated an invalid JSON
-#   2: LowLevelDiscovery failed
-#   NOTE: exit 2 should in usual circumstances never happen, as exit 1 should trigger before, but for the sake
+#   1: Both binaries 'hostname' and 'uci' are not found
+#   2: Determined hostname contains no domain (determined by a dot)
+#   3: No Zabbix agent configuration file could be found (defined in __ZABBIX_AGENT_CONFIGURATION_FILE_LOCATIONS)
+#   4: LowLevelDiscovery generated an invalid JSON
+#   5: LowLevelDiscovery failed
+#   NOTE: exit 5 should in usual circumstances never happen, as exit 1 should trigger before, but for the sake
 #         of completeness it is mentioned here.
 #
 # log file                                      : yes, by default /var/log/zabbix_notification.log
@@ -41,6 +44,14 @@
 # . Various
 #
 # Changelog:
+# 14.01.2020: + Added support for different Zabbix agent configuration file locations. If no configuration file
+#               can be found, the script exits with 3
+#             + Added support for uci to get the hostname, if the binary hostname is not available. If both is
+#               not available the script exits with 1
+#             + hostname needs to contain a domain (server.domain), which is determined by checking if there is a 
+#               dot in the hostname - otherwise the script will exit with 2
+#             ~ Changed exit code for failed lowLevelDiscovery (LLD) to 4 (invalid JSON) and 5 (which should never
+#               fire)
 # 06.01.2020: + Introduced zbx::scriptMonitoring::clear to "reset" the last values of the sourcing script
 #             -> This resulted in following changes:
 #                ~ zbx::scriptMonitoring::init now requires four instead of three arguments (added clearZabbixOnInit)
@@ -58,8 +69,8 @@
 # 04.01.2020: . Initial script
 
 #
-# version: 1.2
-declare VERSION="1.2"
+# version: 1.3
+declare VERSION="1.3"
 
 ##
 # general global variables
@@ -70,9 +81,27 @@ declare -ar __REQUIRED_BINARIES=(
   "jq"
 )
 
+# on openwrt no hostname command is available - there we need to fall back to uci
+hostname=""
+if command -v hostname &> /dev/null; then
+  hostname="$(hostname -f)"
+elif command -v uci &> /dev/null; then
+  hostname="$(uci get system.@system[0].hostname).$(uci get dhcp.@dnsmasq[0].domain)"
+  hostname="${hostname,,}"
+else
+  exit 1;
+fi
+
+# hostname need to be set and contain a domain
+( [[ -n "${hostname}" ]] &&
+  [[ "${hostname}" =~ .*\..* ]]
+) || {
+  exit 2;
+};
+
 # directories, which contain scripts, which low level discovery from zabbix should create items from
 declare -r __SCRIPTS_DIRECTORIES=(
-  "/root/sources/ss-scripts-"$(hostname -f)""
+  "/root/sources/ss-scripts-${hostname}"
   "/root/sources/ss-scripts-global"
 )
 
@@ -86,11 +115,34 @@ declare -ar __EXCLUDED_SCRIPTS=(
   ".*_setup.sh$"
 )
 
+# it is possible, that the Zabbix agent has the following locations configured for its configuration file
+declare -ar __ZABBIX_AGENT_CONFIGURATION_FILE_LOCATIONS=(
+  "/etc/zabbix/zabbix_agentd.conf"
+  "/etc/zabbix_agentd.conf"
+)
+
+# try to find the actual configuration file
+zabbixAgentConfigurationFile=""
+for configurationFile in "${__ZABBIX_AGENT_CONFIGURATION_FILE_LOCATIONS[@]}"; do
+  ( [[ -e "${configurationFile}" ]] &&
+    [[ -f "${configurationFile}" ]]
+  ) || {
+    continue;
+  };
+  
+  zabbixAgentConfigurationFile="${configurationFile}"
+done
+
+# no configuration file could be found
+[[ -n "${zabbixAgentConfigurationFile}" ]] || {
+  exit 3;
+};
+
 ##
 # default global variables
 ###
 # absolute path to the default zabbix agent configuration file
-declare -r __DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE="/etc/zabbix/zabbix_agentd.conf"
+declare -r __DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE="${zabbixAgentConfigurationFile}"
 # absolute path to the default notification log file this script will write to
 declare -r __DEFAULT_NOTIFICATION_LOG="/var/log/zabbix_notification.log"
 # determines, whether to exit on error (with the original return code)
@@ -555,7 +607,7 @@ function zbx::scriptMonitoring::lowLevelDiscovery () {
   output+="]}"
   printf "${output}\n" | jq . || {
     zbx::scriptMonitoring::send "lowLevelDiscovery failed - invalid JSON!" "runtimeMessage";
-    exit 1;
+    exit 4;
   };
 
   exit 0;
@@ -671,7 +723,7 @@ if [[ "${1}" =~ ^lowLevelDiscovery$ ]]; then
   zbx::scriptMonitoring::lowLevelDiscovery || {
     zbx::scriptMonitoring::print "lowLevelDiscovery failed!" "ERROR";
     zbx::scriptMonitoring::send "${0}" "ERROR: lowLevelDiscovery failed!" "RuntimeMessage";
-    exit 2;
+    exit 5;
   };
 
   # LLD was successful
