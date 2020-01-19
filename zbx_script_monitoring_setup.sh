@@ -3,7 +3,9 @@
 declare -r __DESTINATION_LOGROTATE_CONFIGURATION_FILE="/etc/logrotate.d/zabbix_notification"
 
 function setup_logrotate () {
-  cat <<-EOF > "${__DESTINATION_LOGROTATE_CONFIGURATION_FILE}"
+  if [[ -e "/usr/bin/lzop" ]]; then
+    echo "INFO : Found lzop, will use lzop as compression command"
+    cat <<-EOF > "${__DESTINATION_LOGROTATE_CONFIGURATION_FILE}"
 "/var/log/zabbix_notification.log"
 {
   daily
@@ -17,9 +19,26 @@ function setup_logrotate () {
   delaycompress
   missingok
   notifempty
-  create 644 root root
+  create 644 zabbix zabbix
 }
 EOF
+  else
+    echo "INFO : lzop not found, will fall back to gzip as compression command"
+    cat <<-EOF > "${__DESTINATION_LOGROTATE_CONFIGURATION_FILE}"
+"/var/log/zabbix_notification.log"
+{
+  daily
+  rotate 7
+  dateext
+  dateformat _%Y_%m_%d
+  compress
+  delaycompress
+  missingok
+  notifempty
+  create 644 zabbix zabbix
+}
+EOF
+  fi
 };
 
 echo "INFO : Creating file '${__DESTINATION_LOGROTATE_CONFIGURATION_FILE}' .."
