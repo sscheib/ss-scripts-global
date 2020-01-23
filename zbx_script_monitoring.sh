@@ -44,6 +44,14 @@
 # . Various
 #
 # Changelog:
+# 19.01.2020: - Fixed an issue in zbx::scriptMonitoring::print, which would cause the message not beeing
+#               printed to stdout even if we were in an interactive session
+#             ~ Simplified logic in zbx::scriptMonitoring::print
+#             ~ Increased version to 1.5
+# 19.01.2020: - Fixed conditions in zbx::scriptMonitoring::print regarding when to print the message to stdout
+#             - Fixed an issue, which would try to write to the notification log in any case (ignoring the
+#               conditions if we have access etc), which then would lead to an error (access denied on file)
+#             ~ Increased version to 1.4
 # 14.01.2020: + Added support for different Zabbix agent configuration file locations. If no configuration file
 #               can be found, the script exits with 3
 #             + Added support for uci to get the hostname, if the binary hostname is not available. If both is
@@ -69,8 +77,8 @@
 # 04.01.2020: . Initial script
 
 #
-# version: 1.3
-declare VERSION="1.3"
+# version: 1.5
+declare VERSION="1.5"
 
 ##
 # general global variables
@@ -198,13 +206,19 @@ function zbx::scriptMonitoring::print () {
   declare formattedMsg="$(printf "[%s] %s: %-36s: %-7s> %s\n" "$(date +'%d.%m.%y - %H:%M:%S')" "$(basename "${0}")" "${FUNCNAME[1]}" "${level}" "${message}")"
   # looks like: [02.01.20 - 17:52:51] upload_logs_gdrive.sh: main                     : INFO   > my message here
 
-  # if we are in an interactive session, or if we have no access 
-  # to the __NOTIFICATION_LOG file, we print the message to stdout
-  ( [[ ! -t 1 ]] || 
-    [[ ! -w "${__NOTIFICATION_LOG}" ]]
-  ) || {
+  # if we are in an interactive session, we print the msg to stdout
+  [[ ! -t 1 ]] || {
     echo "${formattedMsg}";
   };
+
+  # if we have no access to the __NOTIFICATION_LOG file and are not root (uid=0), we can stop here
+  ( [[ -w "${__NOTIFICATION_LOG}" ]] ||
+    [[ "$(id)" =~ ^uid=0 ]]
+  ) || {
+    return 0;
+  };
+
+  # finally print the message to the logfile
   echo "${formattedMsg}" >> "${__NOTIFICATION_LOG}"
 
   return 0;
