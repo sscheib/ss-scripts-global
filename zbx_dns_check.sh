@@ -26,9 +26,12 @@
 # . Various
 #
 # Changelog:
+# 23.01.2019: - Fixed sending of value as exitCode, rather than runtimeMessage
+#             ~ Added units to output
+#             ~ Incremented version number to 1.5
 # 14.01.2019: + Added support to measure latency in microseconds
 #             + Added proper commenting
-#             + Incremented version nuzmber to 1.4
+#             + Incremented version number to 1.4
 #             + Added exit code 2 (if 3rd parameter is given, but it is not usec)
 #             ~ Changed the output to show whether ms or usec are measured
 # 14.01.2019: + Added proper exit codes
@@ -36,11 +39,12 @@
 # 13.01.2019: . Initial script
 
 #
-# version: 1.4
-declare VERSION="1.4"
+# version: 1.5
+declare VERSION="1.5"
 source /usr/local/bin/zbx_script_monitoring.sh
 zbx::scriptMonitoring::init::default
 
+unset responseTime
 units="ms"
 # third parameter is given
 [[ -z "${3}" ]] || {
@@ -55,7 +59,7 @@ units="ms"
 # enable pipefail, so that it doesn't matter which command is failing when using pipe commands, the first error code will be the final return code
 set -o pipefail
 zbx::scriptMonitoring::send "${0}" "INFO : Checking DNS server '${1}' for domain '${2}' in '${units}'" "runtimeMessage"
-if [[ -z "${prefix}" ]]; then
+if [[ "${units}" =~ ^ms$ ]]; then
   responseTime="$(dig +noall +stats @"${1}" "${2}" 2> /dev/null | awk '/Query time:/ {print $4}')" || {
     zbx::scriptMonitoring::send "${0}" "ERROR: Failed checking '${1}' for domain '${2}'. dig exited with exit code: '${?}'" "runtimeMessage"
     exit 1;
@@ -67,7 +71,7 @@ else
   };
 fi
 
-zbx::scriptMonitoring::send "${0}" "INFO : Successfully queried DNS server '${1}' for domain '${2}'. Response time: ${responseTime}"
+zbx::scriptMonitoring::send "${0}" "INFO : Successfully queried DNS server '${1}' for domain '${2}'. Response time: ${responseTime}${units}" "runtimeMessage"
 echo "${responseTime}"
 
 exit 0;
