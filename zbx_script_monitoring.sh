@@ -44,6 +44,8 @@
 # . Various
 #
 # Changelog:
+# 23.01.2020: - Surpress error message from uci, if not run as root (added -q to the call)
+#             ~ Increased version to 1.6
 # 19.01.2020: - Fixed an issue in zbx::scriptMonitoring::print, which would cause the message not beeing
 #               printed to stdout even if we were in an interactive session
 #             ~ Simplified logic in zbx::scriptMonitoring::print
@@ -77,8 +79,8 @@
 # 04.01.2020: . Initial script
 
 #
-# version: 1.5
-declare VERSION="1.5"
+# version: 1.6
+declare VERSION="1.6"
 
 ##
 # general global variables
@@ -94,7 +96,7 @@ hostname=""
 if command -v hostname &> /dev/null; then
   hostname="$(hostname -f)"
 elif command -v uci &> /dev/null; then
-  hostname="$(uci get system.@system[0].hostname).$(uci get dhcp.@dnsmasq[0].domain)"
+  hostname="$(uci -q get system.@system[0].hostname).$(uci -q get dhcp.@dnsmasq[0].domain)"
   hostname="${hostname,,}"
 else
   exit 1;
