@@ -21,7 +21,7 @@
 #   0: If called via command line argument "LowLevelDiscovery", LLD was successful
 #   1: Both binaries 'hostname' and 'uci' are not found
 #   2: Determined hostname contains no domain (determined by a dot)
-#   3: No Zabbix agent configuration file could be found (defined in __ZABBIX_AGENT_CONFIGURATION_FILE_LOCATIONS)
+#   3: No Zabbix agent configuration file could be found (defined in __ZBXSM_ZABBIX_AGENT_CONFIGURATION_FILE_LOCATIONS)
 #   4: LowLevelDiscovery generated an invalid JSON
 #   5: LowLevelDiscovery failed
 #   NOTE: exit 5 should in usual circumstances never happen, as exit 1 should trigger before, but for the sake
@@ -44,6 +44,10 @@
 # . Various
 #
 # Changelog:
+# 24.01.2010: ~ Added ZBXSM as prefix for all global variables to avoid issues with scripts, which are
+#               sourcing this script
+#             ~ Renamed __NOTIFICATION_LOG to __ZBXSM_NOTIFICATION_LOG_FILE
+#             ~ Increased version to 1.7
 # 23.01.2020: - Surpress error message from uci, if not run as root (added -q to the call)
 #             ~ Increased version to 1.6
 # 19.01.2020: - Fixed an issue in zbx::scriptMonitoring::print, which would cause the message not beeing
@@ -65,8 +69,8 @@
 # 06.01.2020: + Introduced zbx::scriptMonitoring::clear to "reset" the last values of the sourcing script
 #             -> This resulted in following changes:
 #                ~ zbx::scriptMonitoring::init now requires four instead of three arguments (added clearZabbixOnInit)
-#                + Added __DEFAULT_CLEAR_ZABBIX_ON_INIT with the value 0 (=true)
-#                + Added __CLEAR_ZABBIX_ON_INIT
+#                + Added __ZBXSM_DEFAULT_CLEAR_ZABBIX_ON_INIT with the value 0 (=true)
+#                + Added __ZBXSM_CLEAR_ZABBIX_ON_INIT
 #             + Added the Legend
 #             ~ Incremented VERSION to 1.2
 #             - Fixed call to the errorTrap
@@ -79,14 +83,14 @@
 # 04.01.2020: . Initial script
 
 #
-# version: 1.6
-declare VERSION="1.6"
+# version: 1.7
+declare VERSION="1.7"
 
 ##
 # general global variables
 ###
 # binaries, which are required by this script
-declare -ar __REQUIRED_BINARIES=(
+declare -ar __ZBXSM_REQUIRED_BINARIES=(
   "zabbix_get"
   "jq"
 )
@@ -110,30 +114,30 @@ fi
 };
 
 # directories, which contain scripts, which low level discovery from zabbix should create items from
-declare -r __SCRIPTS_DIRECTORIES=(
+declare -r __ZBXSM_SCRIPTS_DIRECTORIES=(
   "/root/sources/ss-scripts-${hostname}"
   "/root/sources/ss-scripts-global"
 )
 
 # additional scripts (in other folders) to "discover" for LLD
-declare -ar __ADDITIONAL_SCRIPTS=(
+declare -ar __ZBXSM_ADDITIONAL_SCRIPTS=(
 )
 
 # scripts to exclude from LLD (if they are in the defined directories)
 # this script needs to be sourced (via 'source scriptname.sh') as FIRST script in the script sourcing this script
-declare -ar __EXCLUDED_SCRIPTS=(
+declare -ar __ZBXSM_EXCLUDED_SCRIPTS=(
   ".*_setup.sh$"
 )
 
 # it is possible, that the Zabbix agent has the following locations configured for its configuration file
-declare -ar __ZABBIX_AGENT_CONFIGURATION_FILE_LOCATIONS=(
+declare -ar __ZBXSM_ZABBIX_AGENT_CONFIGURATION_FILE_LOCATIONS=(
   "/etc/zabbix/zabbix_agentd.conf"
   "/etc/zabbix_agentd.conf"
 )
 
 # try to find the actual configuration file
 zabbixAgentConfigurationFile=""
-for configurationFile in "${__ZABBIX_AGENT_CONFIGURATION_FILE_LOCATIONS[@]}"; do
+for configurationFile in "${__ZBXSM_ZABBIX_AGENT_CONFIGURATION_FILE_LOCATIONS[@]}"; do
   ( [[ -e "${configurationFile}" ]] &&
     [[ -f "${configurationFile}" ]]
   ) || {
@@ -152,21 +156,21 @@ done
 # default global variables
 ###
 # absolute path to the default zabbix agent configuration file
-declare -r __DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE="${zabbixAgentConfigurationFile}"
+declare -r __ZBXSM_DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE="${zabbixAgentConfigurationFile}"
 # absolute path to the default notification log file this script will write to
-declare -r __DEFAULT_NOTIFICATION_LOG="/var/log/zabbix_notification.log"
+declare -r __ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE="/var/log/zabbix_notification.log"
 # determines, whether to exit on error (with the original return code)
-declare -ir __DEFAULT_EXIT_ON_ERROR=1
+declare -ir __ZBXSM_DEFAULT_EXIT_ON_ERROR=1
 # determines, whether on init with default values the last values of the script in Zabbix should be "reset" (set to -1)
-declare -ir __DEFAULT_CLEAR_ZABBIX_ON_INIT=0
+declare -ir __ZBXSM_DEFAULT_CLEAR_ZABBIX_ON_INIT=0
 
 ##
 # runtime global variables - initially set to the default values
 ###
-declare __ZABBIX_AGENT_CONFIGURATION_FILE="${__DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE}"
-declare __NOTIFICATION_LOG="${__DEFAULT_NOTIFICATION_LOG}"
-declare __EXIT_ON_ERROR="${__DEFAULT_EXIT_ON_ERROR}"
-declare -i __CLEAR_ZABBIX_ON_INIT="${__DEFAULT_CLEAR_ZABBIX_ON_INIT}"
+declare __ZBXSM_ZABBIX_AGENT_CONFIGURATION_FILE="${__ZBXSM_DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE}"
+declare __ZBXSM_NOTIFICATION_LOG_FILE="${__ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE}"
+declare __ZBXSM_EXIT_ON_ERROR="${__ZBXSM_DEFAULT_EXIT_ON_ERROR}"
+declare -i __ZBXSM_CLEAR_ZABBIX_ON_INIT="${__ZBXSM_DEFAULT_CLEAR_ZABBIX_ON_INIT}"
 
 ###
 # function zbx::scriptMonitoring::print
@@ -174,7 +178,7 @@ declare -i __CLEAR_ZABBIX_ON_INIT="${__DEFAULT_CLEAR_ZABBIX_ON_INIT}"
 # Description:
 #---
 # Writes the given message to stdout if in an interactive shell. The messages is additionally written to 
-# __NOTIFICATION_LOG in any case.
+# __ZBXSM_NOTIFICATION_LOG_FILE in any case.
 #---
 # Arguments:
 #---
@@ -186,9 +190,9 @@ declare -i __CLEAR_ZABBIX_ON_INIT="${__DEFAULT_CLEAR_ZABBIX_ON_INIT}"
 #---
 # Global variables:
 #---
-#   #  | name                                          | access-type | notes
-#------+-----------------------------------------------+-------------+-------------------------------------------------< 
-#   01 | NOTIFICATION_LOG                              | read        | --
+#   #  | name                                                | access-type | notes
+#------+-----------------------------------------------------+-------------+-------------------------------------------< 
+#   01 | __ZBXSM_NOTIFICATION_LOG_FILE                       | read        | --
 #---
 # Return values:
 #---
@@ -213,15 +217,15 @@ function zbx::scriptMonitoring::print () {
     echo "${formattedMsg}";
   };
 
-  # if we have no access to the __NOTIFICATION_LOG file and are not root (uid=0), we can stop here
-  ( [[ -w "${__NOTIFICATION_LOG}" ]] ||
+  # if we have no access to the __ZBXSM_NOTIFICATION_LOG_FILE file and are not root (uid=0), we can stop here
+  ( [[ -w "${__ZBXSM_NOTIFICATION_LOG_FILE}" ]] ||
     [[ "$(id)" =~ ^uid=0 ]]
   ) || {
     return 0;
   };
 
   # finally print the message to the logfile
-  echo "${formattedMsg}" >> "${__NOTIFICATION_LOG}"
+  echo "${formattedMsg}" >> "${__ZBXSM_NOTIFICATION_LOG_FILE}"
 
   return 0;
 }; # function zbx::scriptMonitoring::print ( <message> [level] )
@@ -241,12 +245,12 @@ function zbx::scriptMonitoring::print () {
 #---
 # Global variables:
 #---
-#   #  | name                                          | access-type | notes
-#------+-----------------------------------------------+-------------+-------------------------------------------------< 
-#   01 | __DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE     | read        | --
-#   02 | __DEFAULT_EXIT_ON_ERROR                       | read        | --
-#   03 | __DEFAULT_CLEAR_ZABBIX_ON_INIT                | read        | --
-#   04 | __DEFAULT_NOTIFICATION_LOG                    | read        | --
+#   #  | name                                                | access-type | notes
+#------+-----------------------------------------------------+-------------+-------------------------------------------< 
+#   01 | __ZBXSM_DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE     | read        | --
+#   02 | __ZBXSM_DEFAULT_EXIT_ON_ERROR                       | read        | --
+#   03 | __ZBXSM_DEFAULT_CLEAR_ZABBIX_ON_INIT                | read        | --
+#   04 | __ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE               | read        | --
 #---
 # Return values:
 #---
@@ -257,7 +261,10 @@ function zbx::scriptMonitoring::print () {
 #####
 function zbx::scriptMonitoring::init::default () {
   zbx::scriptMonitoring::print "Values: '${*}'" "DEBUG"
-  zbx::scriptMonitoring::init "${__DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE}" "${__DEFAULT_EXIT_ON_ERROR}" "${__DEFAULT_CLEAR_ZABBIX_ON_INIT}" "${__DEFAULT_NOTIFICATION_LOG}"
+  zbx::scriptMonitoring::init "${__ZBXSM_DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE}" \
+                              "${__ZBXSM_DEFAULT_EXIT_ON_ERROR}" \
+                              "${__ZBXSM_DEFAULT_CLEAR_ZABBIX_ON_INIT}" \
+                              "${__ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE}"
   returnCode="${?}"
   [[ "${returnCode}" -eq 0 ]] || {
     zbx::scriptMonitoring::print "Initialization of this script with default values failed! Function returned with '${returnCode}'" "ERROR";
@@ -277,7 +284,7 @@ function zbx::scriptMonitoring::init::default () {
 # - Checks the zabbixAgentConfigurationFile for a) existence, b) if it is a file c) readable for the current user
 # - If notificationLog is given as argument it is checked, whether it exists and is writeable for the current user, 
 #   unless we are root (uid=0). If the file does not exist, it is tried to create it
-# - In case notificationLog is not given, the default of __DEFAULT_NOTIFICATION_LOG is used
+# - In case notificationLog is not given, the default of __ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE is used
 #---
 # Arguments:
 #---
@@ -289,17 +296,18 @@ function zbx::scriptMonitoring::init::default () {
 #<  $3> | clearZabbixOnInit                     | boolean     | Determines whether the stored values of the sourcing
 #       |                                       |             | script within Zabbix should be reset (set to -1)
 #[  $4] | notificationLog                       | string      | File which is used as log file from this script. If not
-#       |                                       |             | given __DEFAULT_NOTIFICATION_LOG is used as log file 
+#       |                                       |             | given __ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE is used 
+#       |                                       |             | as log file 
 #---
 # Global variables:
 #---
-#   #  | name                                          | access-type | notes
-#------+-----------------------------------------------+-------------+-------------------------------------------------< 
-#   01 | __DEFAULT_NOTIFICATION_LOG                    | read        | --
-#   02 | __ZABBIX_AGENT_CONFIGURATION_FILE             | write       | --
-#   03 | __EXIT_ON_ERROR                               | write       | --
-#   04 | __CLEAR_ZABBIX_ON_INIT                        | write       | --
-#   05 | __NOTIFICATION_LOG                            | write       | --
+#   #  | name                                                | access-type | notes
+#------+-----------------------------------------------------+-------------+-------------------------------------------< 
+#   01 | __ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE               | read        | --
+#   02 | __ZBXSM_ZABBIX_AGENT_CONFIGURATION_FILE             | write       | --
+#   03 | __ZBXSM_EXIT_ON_ERROR                               | write       | --
+#   04 | __ZBXSM_CLEAR_ZABBIX_ON_INIT                        | write       | --
+#   05 | __ZBXSM_NOTIFICATION_LOG_FILE                       | write       | --
 #---
 # Return values:
 #---
@@ -347,7 +355,7 @@ function zbx::scriptMonitoring::init () {
   };
 
 
-  declare notificationLog="${__DEFAULT_NOTIFICATION_LOG}"
+  declare notificationLog="${__ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE}"
   [[ -z "${4}" ]] || {
     # notificationLog is given, let's see if the file exists
     ( [[ -e "${4}" ]] &&
@@ -373,7 +381,7 @@ function zbx::scriptMonitoring::init () {
   };
 
 
-  for binary in "${__REQUIRED_BINARIES[@]}"; do
+  for binary in "${__ZBXSM_REQUIRED_BINARIES[@]}"; do
     command -v "${binary}" &> /dev/null || {
       zbx::scriptMonitoring::print "Binary '${binary}' is missing, although required from this script!" "ERROR";
       return 7;
@@ -381,19 +389,19 @@ function zbx::scriptMonitoring::init () {
   done
 
   # everything alright, let's assign the given values to the global variables
-  __ZABBIX_AGENT_CONFIGURATION_FILE="${zabbixAgentConfigurationFile}"
-  __EXIT_ON_ERROR="${exitOnError}"
-  __CLEAR_ZABBIX_ON_INIT="${clearZabbixOnInit}"
-  __NOTIFICATION_LOG="${notificationLog}"
+  __ZBXSM_ZABBIX_AGENT_CONFIGURATION_FILE="${zabbixAgentConfigurationFile}"
+  __ZBXSM_EXIT_ON_ERROR="${exitOnError}"
+  __ZBXSM_CLEAR_ZABBIX_ON_INIT="${clearZabbixOnInit}"
+  __ZBXSM_NOTIFICATION_LOG_FILE="${notificationLog}"
 
-  [[ "${__CLEAR_ZABBIX_ON_INIT}" -eq 0 ]] || {
+  [[ "${__ZBXSM_CLEAR_ZABBIX_ON_INIT}" -eq 0 ]] || {
     return 0;
   };
 
   # reset flag is set
   zbx::scriptMonitoring::clear
 
-}; # function zbx::scriptMonitoring::init ( <zabbixAgentConfigurationFile>, <exitOnError>, <clearZabbixOnInit>, [notificationLog, default: __DEFAULT_NOTIFICATION_LOG] )
+}; # function zbx::scriptMonitoring::init ( <zabbixAgentConfigurationFile>, <exitOnError>, <clearZabbixOnInit>, [notificationLog, default: __ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE] )
 
 ###
 # function zbx::scriptMonitoring::clear
@@ -420,9 +428,9 @@ function zbx::scriptMonitoring::init () {
 #---
 # Global variables:
 #---
-#   #  | name                                          | access-type | notes
-#------+-----------------------------------------------+-------------+-------------------------------------------------< 
-#   01 | BASH_SOURCE                                   | read        | --
+#   #  | name                                                | access-type | notes
+#------+-----------------------------------------------------+-------------+-------------------------------------------< 
+#   01 | BASH_SOURCE                                         | read        | --
 #---
 # Return values:
 #---
@@ -502,10 +510,10 @@ function zbx::scriptMonitoring::clear () {
 #---
 # Global variables:
 #---
-#   #  | name                                          | access-type | notes
-#------+-----------------------------------------------+-------------+-------------------------------------------------< 
-#   01 | __ZABBIX_AGENT_CONFIGURATION_FILE             | read        | --
-#   02 | __NOTIFICATION_LOG                            | read        | --
+#   #  | name                                                | access-type | notes
+#------+-----------------------------------------------------+-------------+-------------------------------------------< 
+#   01 | __ZBXSM_ZABBIX_AGENT_CONFIGURATION_FILE             | read        | --
+#   02 | __ZBXSM_NOTIFICATION_LOG_FILE                       | read        | --
 #---
 # Return values:
 #---
@@ -524,7 +532,7 @@ function zbx::scriptMonitoring::send () {
   zbx::scriptMonitoring::print "Values: scriptName: '${scriptName}' value: '${value}' valueType: '${valueType}'" "DEBUG"
 
   zbx::scriptMonitoring::print "Sending '- script_execution["${scriptName}","${valueType}"] ${value}'" "DEBUG"
-  echo "- script_execution["${scriptName}","${valueType}"] ${value}" | zabbix_sender -vv -i - -c "${__ZABBIX_AGENT_CONFIGURATION_FILE}" &>> "${__NOTIFICATION_LOG}" || {
+  echo "- script_execution["${scriptName}","${valueType}"] ${value}" | zabbix_sender -vv -i - -c "${__ZBXSM_ZABBIX_AGENT_CONFIGURATION_FILE}" &>> "${__ZBXSM_NOTIFICATION_LOG_FILE}" || {
     zbx::scriptMonitoring::print "Failed sending data!" "ERROR";
     return 1;
   };
@@ -538,9 +546,9 @@ function zbx::scriptMonitoring::send () {
 # Description:
 #---
 # Used to create the JSON data for the low level discovery (LLD) of the scripts found.
-# The folders to look for scripts can be defined in __SCRIPTS_DIRECTORIES - all files, which are not excluded via
-# __EXCLUDED_SCRIPTS are treated as scripts and will be "discovered" from Zabbix.
-# Additional scripts can be provided via __ADDITIONAL_SCRIPTS - full path to the script is expected.
+# The folders to look for scripts can be defined in __ZBXSM_SCRIPTS_DIRECTORIES - all files, which are not excluded via
+# __ZBXSM_EXCLUDED_SCRIPTS are treated as scripts and will be "discovered" from Zabbix.
+# Additional scripts can be provided via __ZBXSM_ADDITIONAL_SCRIPTS - full path to the script is expected.
 # 
 # NOTE: No sub-directories will be processed. Only files on the first level of the directories specified will be
 #       processed.
@@ -553,12 +561,12 @@ function zbx::scriptMonitoring::send () {
 #---
 # Global variables:
 #---
-#   #  | name                                          | access-type | notes
-#------+-----------------------------------------------+-------------+-------------------------------------------------< 
-#   01 | __SCRIPTS_DIRECTORIES                         | read        | --
-#   02 | __NOTIFICATION_LOG                            | read        | --
-#   03 | __ADDITIONAL_SCRIPTS                          | read        | --
-#   04 | __EXCLUDED_SCRIPTS                            | read        | --
+#   #  | name                                                | access-type | notes
+#------+-----------------------------------------------------+-------------+-------------------------------------------< 
+#   01 | __ZBXSM_SCRIPTS_DIRECTORIES                         | read        | --
+#   02 | __ZBXSM_NOTIFICATION_LOG_FILE                       | read        | --
+#   03 | __ZBXSM_ADDITIONAL_SCRIPTS                          | read        | --
+#   04 | __ZBXSM_EXCLUDED_SCRIPTS                            | read        | --
 #---
 # Return values:
 #---
@@ -574,10 +582,10 @@ function zbx::scriptMonitoring::lowLevelDiscovery () {
   declare -a scripts=()
   declare -i isExcluded=1
 
-  for directory in "${__SCRIPTS_DIRECTORIES[@]}"; do
+  for directory in "${__ZBXSM_SCRIPTS_DIRECTORIES[@]}"; do
     for file in "${directory}/"*; do
       isExcluded=1
-      for excludedFile in "${__EXCLUDED_SCRIPTS[@]}"; do
+      for excludedFile in "${__ZBXSM_EXCLUDED_SCRIPTS[@]}"; do
         [[ ! "${file}" =~ ${excludedFile} ]] || {
           isExcluded=0;
           break;
@@ -585,7 +593,7 @@ function zbx::scriptMonitoring::lowLevelDiscovery () {
       done
 
       [[ "${isExcluded}" -ne 0 ]] || {
-        zbx::scriptMonitoring::print "'${file}' from directory is set to be excluded in '__EXCLUDED_SCRIPTS', skipping it." "INFO";
+        zbx::scriptMonitoring::print "'${file}' from directory is set to be excluded in '__ZBXSM_EXCLUDED_SCRIPTS', skipping it." "INFO";
         continue;
       };
 
@@ -602,9 +610,9 @@ function zbx::scriptMonitoring::lowLevelDiscovery () {
     done
   done
 
-  for file in "${__ADDITIONAL_SCRIPTS[@]}"; do
+  for file in "${__ZBXSM_ADDITIONAL_SCRIPTS[@]}"; do
     [[ -f "${file}" ]] || {
-      zbx::scriptMonitoring::print "'${file}' defined in '__ADDITIONAL_SCRIPTS' is not a file, skipping it." "WARNING";
+      zbx::scriptMonitoring::print "'${file}' defined in '__ZBXSM_ADDITIONAL_SCRIPTS' is not a file, skipping it." "WARNING";
       continue;
     };
     scripts+=("${file}")
@@ -636,7 +644,7 @@ function zbx::scriptMonitoring::lowLevelDiscovery () {
 #---
 # This function will be called on exit of any type of the sourcing script.
 # The retrieved values (exitCode, scriptName, lineNumber) will be send to Zabbix.
-# If the sourcing script is in __EXCLUDED_SCRIPTS we exit with the given exit code, but we don't notify Zabbix
+# If the sourcing script is in __ZBXSM_EXCLUDED_SCRIPTS we exit with the given exit code, but we don't notify Zabbix
 #--
 # Arguments:
 #---
@@ -650,7 +658,7 @@ function zbx::scriptMonitoring::lowLevelDiscovery () {
 #---
 #   #  | name                                          | access-type | notes
 #------+-----------------------------------------------+-------------+-------------------------------------------------< 
-#   01 | __EXCLUDED_SCRIPTS                            | read        | --
+#   01 | __ZBXSM_EXCLUDED_SCRIPTS                            | read        | --
 #---
 # Return values:
 #---
@@ -664,7 +672,7 @@ function zbx::scriptMonitoring::exitTrap () {
   declare -i lineNumber="${1}"
   zbx::scriptMonitoring::print "'Values: exitCode: '${exitCode}' scriptName: '${scriptName}' lineNumber: '${lineNumber}''" "DEBUG"
 
-  for excludedScript in "${__EXCLUDED_SCRIPTS[@]}"; do
+  for excludedScript in "${__ZBXSM_EXCLUDED_SCRIPTS[@]}"; do
     [[ ! "${excludedScript}" =~ ${scriptName} ]] || {
       zbx::scriptMonitoring::print "Trap was triggered from excluded script '${excludedScript}' - silently exiting with given exitCode '${exitCode}'" "DEBUG";
       exit "${exitCode}"; 
@@ -685,7 +693,7 @@ function zbx::scriptMonitoring::exitTrap () {
 #---
 # This function will be called on an error of any type of the sourcing script.
 # The retrieved values (errorCode, scriptName, lineNumber) will be send to Zabbix.
-# If the sourcing script is in __EXCLUDED_SCRIPTS we exit with the given exit code, but we don't notify Zabbix
+# If the sourcing script is in __ZBXSM_EXCLUDED_SCRIPTS we exit with the given exit code, but we don't notify Zabbix
 #--
 # Arguments:
 #---
@@ -697,9 +705,9 @@ function zbx::scriptMonitoring::exitTrap () {
 #---
 # Global variables:
 #---
-#   #  | name                                          | access-type | notes
-#------+-----------------------------------------------+-------------+-------------------------------------------------< 
-#   01 | __EXCLUDED_SCRIPTS                            | read        | --
+#   #  | name                                                | access-type | notes
+#------+-----------------------------------------------------+-------------+-------------------------------------------< 
+#   01 | __ZBXSM_EXCLUDED_SCRIPTS                            | read        | --
 #---
 # Return values:
 #---
@@ -713,7 +721,7 @@ function zbx::scriptMonitoring::errorTrap () {
   declare -i lineNumber="${1}"
   zbx::scriptMonitoring::print "Values: errorCode: '${errorCode}' scriptName: '${scriptName}' lineNumber: '${lineNumber}'" "DEBUG"
 
-  for excludedScript in "${__EXCLUDED_SCRIPTS[@]}"; do
+  for excludedScript in "${__ZBXSM_EXCLUDED_SCRIPTS[@]}"; do
     [[ ! "${excludedScript}" =~ ${scriptName} ]] || {
       zbx::scriptMonitoring::print "Trap was triggered from excluded script '${excludedScript}' - silently exiting with given errorCode '${errorCode}'" "DEBUG";
       exit "${exitCode}"; 
@@ -724,7 +732,7 @@ function zbx::scriptMonitoring::errorTrap () {
   zbx::scriptMonitoring::send "${scriptName}" "${lineNumber}" "errorLine"
 
   # exit with the exit code of the sourcing script
-  [[ "${__EXIT_ON_ERROR}" -eq 0 ]] || {
+  [[ "${__ZBXSM_EXIT_ON_ERROR}" -eq 0 ]] || {
     exit "${errorCode}";
   };
 }; # zbx::scriptMonitoring::errorTrap
