@@ -11,7 +11,7 @@ function setup_logrotate () {
   daily
   rotate 7
   dateext
-  dateformat _%Y_%m_%d
+  dateformat -%Y-%m-%d-%S.log
   compresscmd /usr/bin/lzop
   compressoptions -U -9
   compressext .lzo
@@ -30,7 +30,7 @@ EOF
   daily
   rotate 7
   dateext
-  dateformat _%Y_%m_%d
+  dateformat -%Y-%m-%d-%S.log
   compress
   delaycompress
   missingok
