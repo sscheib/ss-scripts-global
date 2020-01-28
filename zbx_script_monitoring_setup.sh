@@ -8,10 +8,10 @@ function setup_logrotate () {
     cat <<-EOF > "${__DESTINATION_LOGROTATE_CONFIGURATION_FILE}"
 "/var/log/zabbix_notification.log"
 {
-  daily
+  size 10M
   rotate 7
   dateext
-  dateformat -%Y-%m-%d-%S.log
+  dateformat -%Y-%m-%d-%H%M.log
   compresscmd /usr/bin/lzop
   compressoptions -U -9
   compressext .lzo
@@ -27,10 +27,10 @@ EOF
     cat <<-EOF > "${__DESTINATION_LOGROTATE_CONFIGURATION_FILE}"
 "/var/log/zabbix_notification.log"
 {
-  daily
+  size 10M
   rotate 7
   dateext
-  dateformat -%Y-%m-%d-%S.log
+  dateformat -%Y-%m-%d-%H%M.log
   compress
   delaycompress
   missingok
