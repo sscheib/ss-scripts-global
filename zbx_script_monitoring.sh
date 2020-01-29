@@ -44,7 +44,13 @@
 # . Various
 #
 # Changelog:
-# 24.01.2010: ~ Added ZBXSM as prefix for all global variables to avoid issues with scripts, which are
+# 29.01.2020: - Fixed last commit date in this table
+#             - Avoid processing __ZBXSM_ADDITIONAL_SCRIPTS if there are no elements defined in it
+#             - If a directory defined in __ZBXSM_SCRIPTS_DIRECTORIES does not actually contain any files
+#               skip '*' (which usually indicates that there is no file found in that directory)
+#             - Fixed typo in zbx::scriptMonitoring::lowLevelDiscovery
+#             ~ Incremented version to 1.8
+# 24.01.2020: ~ Added ZBXSM as prefix for all global variables to avoid issues with scripts, which are
 #               sourcing this script
 #             ~ Renamed __NOTIFICATION_LOG to __ZBXSM_NOTIFICATION_LOG_FILE
 #             ~ Increased version to 1.7
@@ -83,8 +89,8 @@
 # 04.01.2020: . Initial script
 
 #
-# version: 1.7
-declare VERSION="1.7"
+# version: 1.8
+declare VERSION="1.8"
 
 ##
 # general global variables
@@ -584,6 +590,11 @@ function zbx::scriptMonitoring::lowLevelDiscovery () {
 
   for directory in "${__ZBXSM_SCRIPTS_DIRECTORIES[@]}"; do
     for file in "${directory}/"*; do
+      # '*' usually indicates, that there is no file in the defined directory
+      [[ ! "$(basename "${file}")" =~ ^\*$ ]] || {
+        zbx::scriptMonitoring::print "'${file}' indicates, that the directory does not contain any files, skipping it." "INFO";
+        continue;
+      };
       isExcluded=1
       for excludedFile in "${__ZBXSM_EXCLUDED_SCRIPTS[@]}"; do
         [[ ! "${file}" =~ ${excludedFile} ]] || {
@@ -603,20 +614,23 @@ function zbx::scriptMonitoring::lowLevelDiscovery () {
       };
 
       [[ ! "$(basename "${file}")" =~ [[:space:]] ]] || {
-        zbx::scriptMonitoring::print "File '${file}' from directory is contains spaces, which is not supported, skipping it." "WARNING";
+        zbx::scriptMonitoring::print "File '${file}' from directory contains spaces, which is not supported, skipping it." "WARNING";
         continue;
       };
       scripts+=("${file}")
     done
   done
 
-  for file in "${__ZBXSM_ADDITIONAL_SCRIPTS[@]}"; do
-    [[ -f "${file}" ]] || {
-      zbx::scriptMonitoring::print "'${file}' defined in '__ZBXSM_ADDITIONAL_SCRIPTS' is not a file, skipping it." "WARNING";
-      continue;
-    };
-    scripts+=("${file}")
-  done
+  # only process the array if it actually contains any items
+  if [[ "${#__ZBXSM_ADDITIONAL_SCRIPTS[@]}" -ge 1 ]]; then
+    for file in "${__ZBXSM_ADDITIONAL_SCRIPTS[@]}"; do
+      [[ -f "${file}" ]] || {
+        zbx::scriptMonitoring::print "'${file}' defined in '__ZBXSM_ADDITIONAL_SCRIPTS' is not a file, skipping it." "WARNING";
+        continue;
+      };
+      scripts+=("${file}")
+    done
+  fi
 
   # we need to prefix this
   output='{ "data": ['
