@@ -8,7 +8,7 @@ function setup_logrotate () {
     cat <<-EOF > "${__DESTINATION_LOGROTATE_CONFIGURATION_FILE}"
 "/var/log/zabbix_notification.log"
 {
-  size 10M
+  size 3M
   rotate 7
   dateext
   dateformat -%Y-%m-%d-%H%M
@@ -28,7 +28,7 @@ EOF
     cat <<-EOF > "${__DESTINATION_LOGROTATE_CONFIGURATION_FILE}"
 "/var/log/zabbix_notification.log"
 {
-  size 10M
+  size 3M
   rotate 7
   dateext
   dateformat -%Y-%m-%d-%H%M
