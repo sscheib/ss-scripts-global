@@ -48,7 +48,7 @@ set -o pipefail
 # path of the smb share
 declare -r __SHARE_PATH="/backup"
 # regex to check if the share path is available
-declare -r __SHARE_PATH_REGEX="emby.lan.*${__SHARE_PATH}"
+declare -r __SHARE_PATH_REGEX="synology-ds918\.(home|office)\.int\.scheib\.me.*${__SHARE_PATH}"
 # get both hostname and domain from uci 
 declare -r __HOSTNAME="$(echo "$(uci -q get system.@system[0].hostname)"."$(uci -q get dhcp.@dnsmasq[0].domain)" | awk '{print tolower($0)}')"
 # stores the message in the mail
@@ -192,19 +192,19 @@ function openwrtConfigurationBackup::init () {
 # return code  | description
 #--------------+-------------------------------------------------------------------------------------------------------< 
 # (return)   0 | If everything went fine
-# (return)   1 | If SMB share is not mounted
+# (return)   1 | If share is not mounted
 # (return)   2 | If unable to create a folder to write the backup to within __SHARE_PATH
 # (return)   3 | If the sysupgrade command (which creates a backup) failes
 #####
 function openwrtConfigurationBackup::create () {
-  openwrtConfigurationBackup::print "Checking if SMB share is mounted .." "INFO"
-  mount | grep -q "${__SHARE_PATH_REGEX}" &> /dev/null || {
-    declare msg="SMB share is not mounted!";
+  openwrtConfigurationBackup::print "Checking if share is mounted .." "INFO"
+  mount | grep -Eq "${__SHARE_PATH_REGEX}" &> /dev/null || {
+    declare msg="Share is not mounted!";
     openwrtConfigurationBackup::print "${msg}" "ERROR";
     __MESSAGE="${msg}";
     return 1;
   };
-  openwrtConfigurationBackup::print "SMB share is mounted" "INFO"
+  openwrtConfigurationBackup::print "Share is mounted" "INFO"
 
   declare destination="${__SHARE_PATH}/$(date +'%Y')/$(date +'%m')"
   openwrtConfigurationBackup::print "Checking if folder '${destination}' exists .." "INFO"
@@ -237,8 +237,8 @@ function openwrtConfigurationBackup::create () {
 #---
 # Description:
 #---
-# Send an email to automatic@cron.email using cron.email on port 25 as SMTP server. The sender name is 
-# backup@<HOSTNAME>.<DOMAIN>
+# Send an email to automatic@cron.email, first trying to use mail.pve.ext.scheib.me (VPN DNS), otherwise try using 
+# cron.email on port 25 as SMTP server. The sender name is backup@<HOSTNAME>.<DOMAIN>
 #---
 # Arguments:
 #---
@@ -263,9 +263,12 @@ function openwrtConfigurationBackup::create () {
 #####
 function openwrtConfigurationBackup::send_email () {
   openwrtConfigurationBackup::print "Sending notification mail .." "INFO"
-  echo "${__MESSAGE}" | mailsend -smtp cron.email -port 25 -t automatic@cron.email -f backup@"${__HOSTNAME}" -sub "${__SUBJECT}" -starttls || {
-    openwrtConfigurationBackup::print "Sending notification mail failed!" "ERROR";
-    return 1;
+  echo "${__MESSAGE}" | mailsend -smtp mail.pve.ext.scheib.me -port 25 -t automatic@cron.email -f backup@"${__HOSTNAME}" -sub "${__SUBJECT}" -starttls || {
+    openwrtConfigurationBackup::print "Sending notificaiton mail via 'mail.pve.ext.scheib.me' (VPN) failed, trying public DNS name 'cron.email'" "WARNING";
+    echo "${__MESSAGE}" | mailsend -smtp cron.email -port 25 -t automatic@cron.email -f backup@"${__HOSTNAME}" -sub "${__SUBJECT}" -starttls || {
+      openwrtConfigurationBackup::print "Sending notification mail via 'cron.mail' failed!" "ERROR";
+      return 1;
+    };
   };
   openwrtConfigurationBackup::print "Successfully sent notification mail" "INFO"
 
