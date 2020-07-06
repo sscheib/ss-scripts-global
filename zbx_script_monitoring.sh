@@ -44,6 +44,8 @@
 # . Various
 #
 # Changelog:
+# 06.07.2020: - Accidentally added zabbix_get instead of zabbix_sender as required binary - that is now fixed ;>
+#             - Bumped version to 1.9
 # 29.01.2020: - Fixed last commit date in this table
 #             - Avoid processing __ZBXSM_ADDITIONAL_SCRIPTS if there are no elements defined in it
 #             - If a directory defined in __ZBXSM_SCRIPTS_DIRECTORIES does not actually contain any files
@@ -89,15 +91,15 @@
 # 04.01.2020: . Initial script
 
 #
-# version: 1.8
-declare VERSION="1.8"
+# version: 1.9
+declare VERSION="1.9"
 
 ##
 # general global variables
 ###
 # binaries, which are required by this script
 declare -ar __ZBXSM_REQUIRED_BINARIES=(
-  "zabbix_get"
+  "zabbix_sender"
   "jq"
 )
 
