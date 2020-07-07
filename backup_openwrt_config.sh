@@ -28,6 +28,7 @@
 # . Various
 #
 # Changelog:
+# 07.07.2020: - Changed sourcing of zbx_script_monitoring.sh: Try sourcing it from current working directory, if it fails try via /usr/local/sbin
 # 26.01.2020: . Initial
 
 # version: 1.0
@@ -35,8 +36,10 @@ VERSION=1.0
 
 # source Zabbix script monitoring 
 source zbx_script_monitoring.sh &> /dev/null || {
-  echo "ERROR: Unable to source zbx_script_monitoring.sh";
-  exit 1;
+  source /usr/local/sbin/zbx_script_monitoring.sh &> /dev/null || {
+    echo "ERROR: Unable to source zbx_script_monitoring.sh";
+    exit 1;
+  };
 };
 zbx::scriptMonitoring::init::default
 
