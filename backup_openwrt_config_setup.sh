@@ -27,11 +27,13 @@
 # . Various
 #
 # Changelog:
+# 12.07.2020: ~ Changed the logfile to /logs/backup_openwrt_config.log
+#           : ~ Bumped version to 1.1
 # 07.07.2020: - Fixed log file and logrotate file path to match the actual files generated from backup_openwrt_config.sh
 # 05.07.2020: . Initial
 
-# version: 1.0
-VERSION=1.0
+# version: 1.1
+VERSION=1.1
 
 # log files with permissions and owners to create and add to the logrotate file
 # format:
@@ -44,7 +46,7 @@ VERSION=1.0
 #       the last one processed will "win" - but will contain all logfiles. It is assumed, that if the same logrotate
 #       configuration is defined, permissions and owner should be the same for all log files.
 declare -Ar __DESTINATION_LOG_FILES=(
-  ["/var/log/backup_openwrt_config.log"]="root:root,0644,/etc/logrotate.d/backup_openwrt_config"
+  ["/logs/backup_openwrt_config.log"]="root:root,0644,/etc/logrotate.d/backup_openwrt_config"
 )
 
 ###

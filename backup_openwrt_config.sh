@@ -28,11 +28,13 @@
 # . Various
 #
 # Changelog:
+# 12.07.2020: ~ Changed the logfile to /logs/backup_openwrt_config.log
+#           : ~ Bumped version to 1.1
 # 07.07.2020: - Changed sourcing of zbx_script_monitoring.sh: Try sourcing it from current working directory, if it fails try via /usr/local/sbin
 # 26.01.2020: . Initial
 
-# version: 1.0
-VERSION=1.0
+# version: 1.1
+VERSION=1.1
 
 # source Zabbix script monitoring 
 source zbx_script_monitoring.sh &> /dev/null || {
@@ -59,7 +61,7 @@ declare __MESSAGE=""
 # initially set the hostname as subject (to append the rest later)
 declare __SUBJECT="${__HOSTNAME}: "
 # log file for this script
-declare -r __LOG_FILE="/var/log/$(basename "${0}" | sed 's/\.sh$//').log"
+declare -r __LOG_FILE="/logs/$(basename "${0}" | sed 's/\.sh$//').log"
 # required binaries by this script
 declare -ar __REQUIRED_BINARIES=(
   "sysupgrade"
