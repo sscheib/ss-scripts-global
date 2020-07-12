@@ -44,6 +44,10 @@
 # . Various
 #
 # Changelog:
+# 12.07.2020: ~ It will now be differentiated between openwrt and non-openwrt devices (based on the existence
+#               of /etc/openwrt_release). In case of an openwrt device, the default log file is /logs/zabbix_notification.log,
+#               in case of a non-openwrt device the default log file is /var/log/zabbix_notification.log
+#             ~ Bumped version to 1.10
 # 06.07.2020: - Accidentally added zabbix_get instead of zabbix_sender as required binary - that is now fixed ;>
 #             - Bumped version to 1.9
 # 29.01.2020: - Fixed last commit date in this table
@@ -91,8 +95,8 @@
 # 04.01.2020: . Initial script
 
 #
-# version: 1.9
-declare VERSION="1.9"
+# version: 1.10
+declare VERSION="1.10"
 
 ##
 # general global variables
@@ -166,7 +170,13 @@ done
 # absolute path to the default zabbix agent configuration file
 declare -r __ZBXSM_DEFAULT_ZABBIX_AGENT_CONFIGURATION_FILE="${zabbixAgentConfigurationFile}"
 # absolute path to the default notification log file this script will write to
-declare -r __ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE="/var/log/zabbix_notification.log"
+declare __ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE
+# for openwrt the destination log is inside /logs (because of the volatile /var/log) of openwrt
+if [[ -f "/etc/openwrt_release" ]]; then
+  __ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE="/logs/zabbix_notification.log"
+else
+  __ZBXSM_DEFAULT_NOTIFICATION_LOG_FILE="/var/log/zabbix_notification.log"
+fi
 # determines, whether to exit on error (with the original return code)
 declare -ir __ZBXSM_DEFAULT_EXIT_ON_ERROR=1
 # determines, whether on init with default values the last values of the script in Zabbix should be "reset" (set to -1)

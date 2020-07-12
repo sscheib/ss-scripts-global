@@ -27,10 +27,14 @@
 # . Various
 #
 # Changelog:
+# 12.07.2020: ~ It will now be differentiated between openwrt and non-openwrt devices (based on the existence
+#               of /etc/openwrt_release). In case of an openwrt device, the default log file is /logs/zabbix_notification.log,
+#               in case of a non-openwrt device the default log file is /var/log/zabbix_notification.log
+#             ~ Bumped version to 1.1
 # 05.07.2020: . Initial
 
-# version: 1.0
-VERSION=1.0
+# version: 1.1
+VERSION=1.1
 
 # log files with permissions and owners to create and add to the logrotate file
 # format:
@@ -42,9 +46,14 @@ VERSION=1.0
 # NOTE: If there are multiple entries with different log files, but the same logrotate configuration file defined
 #       the last one processed will "win" - but will contain all logfiles. It is assumed, that if the same logrotate
 #       configuration is defined, permissions and owner should be the same for all log files.
-declare -Ar __DESTINATION_LOG_FILES=(
-  ["/var/log/zabbix_notification.log"]="zabbix:zabbix,0644,/etc/logrotate.d/zabbix_notification"
-)
+declare -A __DESTINATION_LOG_FILES
+
+# for openwrt the destination log is inside /logs (because of the volatile /var/log) of openwrt
+if [[ -f "/etc/openwrt_release" ]]; then
+  __DESTINATION_LOG_FILES["/logs/zabbix_notification.log"]="zabbix:zabbix,0644,/etc/logrotate.d/zabbix_notification"
+else
+  __DESTINATION_LOG_FILES["/var/log/zabbix_notification.log"]="zabbix:zabbix,0644,/etc/logrotate.d/zabbix_notification"
+fi
 
 ###
 # function write_output
