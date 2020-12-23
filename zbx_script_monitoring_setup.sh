@@ -27,14 +27,16 @@
 # . Various
 #
 # Changelog:
+# 26.09.2020: + Added support for Synology devices
+#             - Fixed missing log-level at two write_output calls
 # 12.07.2020: ~ It will now be differentiated between openwrt and non-openwrt devices (based on the existence
 #               of /etc/openwrt_release). In case of an openwrt device, the default log file is /logs/zabbix_notification.log,
 #               in case of a non-openwrt device the default log file is /var/log/zabbix_notification.log
 #             ~ Bumped version to 1.1
 # 05.07.2020: . Initial
 
-# version: 1.1
-VERSION=1.1
+# version: 1.2
+VERSION=1.2
 
 # log files with permissions and owners to create and add to the logrotate file
 # format:
@@ -51,6 +53,9 @@ declare -A __DESTINATION_LOG_FILES
 # for openwrt the destination log is inside /logs (because of the volatile /var/log) of openwrt
 if [[ -f "/etc/openwrt_release" ]]; then
   __DESTINATION_LOG_FILES["/logs/zabbix_notification.log"]="zabbix:zabbix,0644,/etc/logrotate.d/zabbix_notification"
+# for synology devices, there is no user "zabbix" or group "zabbix", therefore "root" for both user and group will be used
+elif [[ -f "/etc/VERSION" ]]; then
+  __DESTINATION_LOG_FILES["/var/log/zabbix_notification.log"]="root:root,0644,/etc/logrotate.d/zabbix_notification"
 else
   __DESTINATION_LOG_FILES["/var/log/zabbix_notification.log"]="zabbix:zabbix,0644,/etc/logrotate.d/zabbix_notification"
 fi
@@ -136,7 +141,7 @@ function setup_log_files () {
     };
     write_output "Created log file '${logFile}'" "INFO";
 
-    write_output "Checking format for owner and permissions for '${logFile}' .."
+    write_output "Checking format for owner and permissions for '${logFile}' .." "INFO";
     IFS="," read -ra logFileAttributes <<< "${__DESTINATION_LOG_FILES["${logFile}"]}"
     ( [[ "${#logFileAttributes[@]}" -eq 2 ]] || 
       [[ "${#logFileAttributes[@]}" -eq 3 ]] 
@@ -291,7 +296,7 @@ function setup_logrotate_configuration_files () {
     write_output "Creating logrotate file '${logrotateConfigurationFile} ..'" "INFO";
     # first add all log files to the logrotate file ..
     for identicalLogFile in "${identicalLogFiles[@]}"; do
-      write_output "Adding '${identicalLogFile}' to '${logrotateConfigurationFile}' ..";
+      write_output "Adding '${identicalLogFile}' to '${logrotateConfigurationFile}' .." "INFO";
       cat <<-EOF >> "${logrotateConfigurationFile}"
 "${identicalLogFile}"
 EOF
