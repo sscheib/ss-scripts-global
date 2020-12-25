@@ -11,7 +11,7 @@
 #   3: Configuration Backup failed
 #   4: Unable to send status email
 #
-# log file                                      : yes, by default /var/log/openwrt_configuration_backup.log
+# log file                                      : yes, by default as the script name (/logs/backup_openwrt_config.log)
 # logrotate                                     : yes, provided with the _setup script
 # zabbix script monitoring integration
 #  - exit and error codes                       : yes, traps in zbx_script_monitoring.sh
@@ -28,13 +28,15 @@
 # . Various
 #
 # Changelog:
+# 25.12.2020: ~ Fixed location of log file in the description (header)
+#             ~ Bumped version to 1.3
 # 12.07.2020: ~ Changed the logfile to /logs/backup_openwrt_config.log
 #           : ~ Bumped version to 1.1
 # 07.07.2020: - Changed sourcing of zbx_script_monitoring.sh: Try sourcing it from current working directory, if it fails try via /usr/local/sbin
 # 26.01.2020: . Initial
 
-# version: 1.1
-VERSION=1.1
+# version: 1.3
+VERSION=1.3
 
 # source Zabbix script monitoring 
 source zbx_script_monitoring.sh &> /dev/null || {
