@@ -7,7 +7,7 @@
 #   as well.
 #   However, if a USB partition is mounted read-only, processing will stop, as this usually indicates a
 #   broken/faulty (thus read-only) USB device. This way replacing the USB device is as easy as copying
-#   the contents from the backup a new USB device.
+#   the contents from the backup to a new USB device.
 #  
 # Exit codes:
 #   0: Backup of either flash or USB partitions was successful
@@ -32,16 +32,22 @@
 # . Various
 #
 # Changelog:
+# 11.01.2021: - Fixed a typo
+#             - Removed unsupported long names for getops
+# 25.12.2020: + Added function openwrtDataBackup::init 
+#             ~ Bumped version to 1.3
 # 25.12.2020: - Refactoring of the script
 #           : ~ Bumped version to 1.1
 # 24.12.2020: . Initial
 #
-# version: 1.1
-VERSION=1.1
+# version: 1.3
+VERSION=1.3
 # name of the usb dev name
 declare __USB_DEVICE_NAME="sda"
 # path where the remote (e.g. NFS) is mounted on the local file system
 declare -r __REMOTE_PATH="/backup"
+# regex to check if the share path is available
+declare -r __REMOTE_PATH_REGEX="synology-ds918\.(home|office)\.int\.scheib\.me.*${__REMOTE_PATH}"
 # name of the folder for the usb data
 declare -r __USB_DATA_FOLDER_NAME="usb-data"
 # name of the folder for the flash data
@@ -132,6 +138,55 @@ function openwrtDataBackup::print () {
 
   return 0;
 }; # function openwrtDataBackup::print ( <message> [level] )
+
+###
+# function openwrtConfigurationBackup::init
+#---
+# Description:
+#---
+# Checks if all requirements to run this script are given.
+#---
+# Arguments:
+#---
+#   #  | name                                   | type        | description
+#------+----------------------------------------+-------------+--------------------------------------------------------< 
+#  none
+#---
+# Global variables:
+#---
+#   #  | name                                          | access-type | notes
+#------+-----------------------------------------------+-------------+-------------------------------------------------< 
+#   01 | __REQUIRED_BINARIES                           | read        | --
+#   02 | __MESSAGE                                     | write       | --
+#---
+# Return values:
+#---
+# return code  | description
+#--------------+-------------------------------------------------------------------------------------------------------< 
+# (return)   0 | If all conditions to run this script are met
+# (return)   1 | If one or more binaries defined in __REQUIRED_BINARIES are missing
+# (return)   2 | If the remote is not mounted
+#####
+function openwrtDataBackup::init () {
+  openwrtDataBackup::print "Checking if all required binaries are installed .." "DEBUG";
+  for binary in "${__REQUIRED_BINARIES[@]}"; do
+    command -v "${binary}" &> /dev/null || {
+      openwrtDataBackup::print "Binary '${binary}' is not installed, but required by this script!" "ERROR"; 
+      return 1; 
+    };
+  done
+  openwrtDataBackup::print "All required binaries are installed, continuing." "INFO";
+
+  openwrtDataBackup::print "Checking if share is mounted .." "DEBUG";
+  mount | grep -Eq "${__REMOTE_PATH_REGEX}" &> /dev/null || {
+    openwrtDataBackup::print "Remote share at '${__REMOTE_PATH}' is not mounted!" "ERROR";
+    return 2;
+  };
+  openwrtDataBackup::print "Remote share is mounted at '${__REMOTE_PATH}', continuing." "INFO";
+
+  return 0;
+}; # function openwrtDataBackup::init ( )
+
 
 ###
 # function openwrtConfigurationBackup::backup_data
@@ -334,9 +389,9 @@ function openwrtDataBackup::backup_data () {
 function openwrtDataBackup::usage ( ) {
   echo "Usage of "$(basename "${0}")""
   echo "Available command line options:"
-  echo "-u or --usb-data-backup: Will backup all mounted partions of the defined USB device"
-  echo "-f or --flash-data-backup: Will backup the flash data"
-  echo "-h or --help: Print this message"
+  echo "-u: Will backup all mounted partions of the defined USB device"
+  echo "-f: Will backup the flash data"
+  echo "-h: Print this message"
 
   return 0;
 } #; openwrtDataBackup::usage
@@ -350,22 +405,38 @@ function openwrtDataBackup::usage ( ) {
 # parse command line options
 while getopts ":fuh" arg; do
   case "${arg}" in
-    u|--usb-data-backup)
-      openwrtDataBackup::backup_data "usb" || {
-        openwrtDataBackup::print "Backing up USB data failed!" "ERROR";
+    # USB or flash backup requested
+    u|f)
+      # initialization only needed if we actually perform a backup
+      openwrtDataBackup::init || {
+        openwrtDataBackup::print "Initialization of this script has failed!" "ERROR";
         exit 2;
       };
+
+      # once the initialization completed, we need to destinct between USB and flash backup
+      case "${arg}" in
+        # USB backup
+        u)
+          openwrtDataBackup::backup_data "usb" || {
+            openwrtDataBackup::print "Backing up USB data failed!" "ERROR";
+            exit 2;
+          };
+        ;;
+        # flash backup
+        f)
+          openwrtDataBackup::backup_data "flash" || {
+            openwrtDataBackup::print "Backing up USB data failed!" "ERROR";
+            exit 3;
+          };
+        ;;
+      esac
     ;;
-    f)
-      openwrtDataBackup::backup_data "flash" || {
-        openwrtDataBackup::print "Backing up USB data failed!" "ERROR";
-        exit 3;
-      };
-    ;;
+    # unknown command line argument given
     \?)
       openwrtDataBackup::print "Invalid command line option '-${OPTARG}'!" "ERROR";
       continue;
     ;;
+    # help requested
     h)
       openwrtDataBackup::usage
       exit 0;
