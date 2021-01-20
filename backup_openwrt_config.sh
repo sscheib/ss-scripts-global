@@ -2,7 +2,7 @@
 
 ###
 # Description:
-#   This script is used to create a backup of all configured files from openwrt using sysupgrade --backup
+#   This script is used to create a backup of all configured files from openwrt using sysupgrade --backup -o -c
 #  
 # Exit codes:
 #   0: Backup was created successfully and notification mail send successfully as well
@@ -28,6 +28,9 @@
 # . Various
 #
 # Changelog:
+# 20.01.2021: ~ Added -o and -c to sysupgrade call in order to preserve everything, which was changed within / and /etc (does not include binaries)
+#             ~ Extended the description to include -o and -c
+#             ~ Bumped version to 1.4
 # 25.12.2020: ~ Fixed location of log file in the description (header)
 #             ~ Bumped version to 1.3
 # 12.07.2020: ~ Changed the logfile to /logs/backup_openwrt_config.log
@@ -35,8 +38,8 @@
 # 07.07.2020: - Changed sourcing of zbx_script_monitoring.sh: Try sourcing it from current working directory, if it fails try via /usr/local/sbin
 # 26.01.2020: . Initial
 
-# version: 1.3
-VERSION=1.3
+# version: 1.4
+VERSION=1.4
 
 # source Zabbix script monitoring 
 source zbx_script_monitoring.sh &> /dev/null || {
@@ -228,7 +231,7 @@ function openwrtConfigurationBackup::create () {
   
   declare archivePath="${destination}/"$( echo "$(uci -q get system.@system[0].hostname)"."$(/sbin/uci -q get dhcp.@dnsmasq[0].domain)" | awk '{print tolower($0)}')"_"$(date +%Y-%m-%d)".tar.gz"
   openwrtConfigurationBackup::print "Saving configuration to '${archivePath}' .." "INFO";
-  /sbin/sysupgrade --create-backup "${archivePath}" &> /dev/null || {
+  /sbin/sysupgrade -c -o --create-backup "${archivePath}" &> /dev/null || {
     declare msg="Creating configuration backup to '${archivePath}' failed!";
     openwrtConfigurationBackup::print "${msg}" "ERROR";
     __MESSAGE="${msg}";
